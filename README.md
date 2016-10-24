@@ -1,6 +1,6 @@
-# topology-generator
+# entity-generator
 
-Use this application to quickly load topology data into sluice.
+Use this application to quickly load entity data into Conduce.
 
 ## build/run
 
@@ -10,4 +10,4 @@ Use this application to quickly load topology data into sluice.
 1. `cmake ..`
 1. `make`
 
-- `./src/topology-generator/entity-generator`
+- `./src/entity-generator/entity-generator`
