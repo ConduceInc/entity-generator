@@ -34,6 +34,7 @@ struct CommandLineOptions {
   std::string hostname;
   std::string dataset;
   std::string apiKey;
+  std::string kind;
 };
 
 struct Entity {
@@ -123,30 +124,25 @@ void initializeEntities() {
       // newEntity.timestamp = JAN_01_1996_GMT;
       newEntity.timestamp = NowGMT() - ONE_WEEK;
     }
-    newEntity.kind = "hank_hill";
+    newEntity.kind = options.kind;
     entityList.push_back(newEntity);
   }
 }
 
-const char *updateEntities() {
-  boost::mt19937 alg_walk(0);
-  boost::random::uniform_real_distribution<> walk_range(-1 * options.stepSize,
-                                                        options.stepSize);
-
-  random_generator walk(alg_walk, walk_range);
-
+const char *updateEntities(random_generator &walk) {
   rapidjson::Document jsonDoc;
   jsonDoc.SetObject();
 
   rapidjson::Value entities(rapidjson::kArrayType);
 
+  int count = 0;
   for (std::vector<Entity>::iterator entity = entityList.begin();
        entity != entityList.end(); ++entity) {
     updateLocation(entity, walk);
     if (options.live) {
       entity->timestamp = NowGMT();
     } else {
-      entity->timestamp += options.timeInterval;
+      entity->timestamp += options.timeInterval * 1000;
     }
     rapidjson::Value newEntity(rapidjson::kObjectType);
     newEntity.AddMember("identity",
@@ -155,19 +151,28 @@ const char *updateEntities() {
     newEntity.AddMember("timestamp-ms", rapidjson::Value(entity->timestamp),
                         jsonDoc.GetAllocator());
     newEntity.AddMember(
+        "endtime-ms",
+        rapidjson::Value(entity->timestamp + options.timeInterval * 1000),
+        jsonDoc.GetAllocator());
+    newEntity.AddMember(
         "kind", rapidjson::Value(entity->kind.c_str(), entity->kind.size()),
         jsonDoc.GetAllocator());
     newEntity.AddMember("path",
                         getJsonPath(entity->location, jsonDoc.GetAllocator()),
                         jsonDoc.GetAllocator());
     entities.PushBack(newEntity, jsonDoc.GetAllocator());
+    ++count;
   }
+  std::cout << "Updated " << count << " entities" << std::endl;
   jsonDoc.AddMember("entities", entities, jsonDoc.GetAllocator());
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
   jsonDoc.Accept(writer);
-  return buffer.GetString();
+  const char *jsonStr = buffer.GetString();
+  char *strCpy = new char[strlen(jsonStr)];
+  strcpy(strCpy, jsonStr);
+  return strCpy;
 }
 
 void parseCommandLine(int argc, char *argv[]) {
@@ -175,6 +180,8 @@ void parseCommandLine(int argc, char *argv[]) {
                                "network fluoroscope data (topologies) to "
                                "sluice.\n\nConfiguration options");
   desc.add_options()("help", "Print the list of command line options")(
+      "kind", po::value<std::string>(&options.kind)->default_value("default"),
+      "Data kind to assign to entities")(
       "host", po::value<std::string>(&options.hostname)
                   ->default_value("dev-app.conduce.com"),
       "Resolvable name or IP address of Conduce server")(
@@ -233,13 +240,51 @@ void parseCommandLine(int argc, char *argv[]) {
   }
 }
 
+struct string {
+  char *ptr;
+  size_t len;
+};
+
+void init_string(struct string *s) {
+  s->len = 0;
+  s->ptr = (char *)malloc(s->len + 1);
+  if (s->ptr == NULL) {
+    fprintf(stderr, "malloc() failed\n");
+    exit(EXIT_FAILURE);
+  }
+  s->ptr[0] = '\0';
+}
+
+size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s) {
+  size_t new_len = s->len + size * nmemb;
+  s->ptr = (char *)realloc(s->ptr, new_len + 1);
+  if (s->ptr == NULL) {
+    fprintf(stderr, "realloc() failed\n");
+    exit(EXIT_FAILURE);
+  }
+  memcpy(s->ptr + s->len, ptr, size * nmemb);
+  s->ptr[new_len] = '\0';
+  s->len = new_len;
+
+  return size * nmemb;
+}
+
 int main(int argc, char *argv[]) {
+
+  boost::mt19937 alg_walk(0);
+  boost::random::uniform_real_distribution<> walk_range(-1 * options.stepSize,
+                                                        options.stepSize);
+
+  random_generator walk(alg_walk, walk_range);
+
   parseCommandLine(argc, argv);
   std::string CONDUCE_ADD_DATA_URL =
       "https://" + options.hostname + "/conduce/api/datasets/add_datav2/";
   std::string addDataUrl = CONDUCE_ADD_DATA_URL + options.dataset;
   CURL *curl = curl_easy_init();
   char errorBuffer[CURL_ERROR_SIZE];
+  struct string s;
+  init_string(&s);
   struct curl_slist *entityHeader = NULL;
   if (curl) {
     curl_easy_setopt(curl, CURLOPT_URL, addDataUrl.c_str());
@@ -249,6 +294,8 @@ int main(int argc, char *argv[]) {
     entityHeader = curl_slist_append(entityHeader, keyHeader.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, entityHeader);
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
+    // curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    // curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
   }
 
   initializeEntities();
@@ -257,9 +304,13 @@ int main(int argc, char *argv[]) {
       (60 / options.timeInterval) * 60 * 24 * options.daysToRun;
   for (int count = 0; count < UPDATE_COUNT; ++count) {
     // double before = NowGMT();
-    const char *entitiesStr = updateEntities();
+    const char *entitiesStr = updateEntities(walk);
+    if (strlen(entitiesStr) == 0) {
+      std::cout << "Zero length string" << std::endl;
+      return 1;
+    }
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, entitiesStr);
-    std::cout << entitiesStr << std::endl;
+    std::cout << "request data: " << entitiesStr << std::endl;
 
     CURLcode res;
     errorBuffer[0] = 0;
@@ -269,6 +320,7 @@ int main(int argc, char *argv[]) {
       std::cout << errorBuffer << std::endl;
       return 1;
     }
+    delete[] entitiesStr;
     if (!options.ungoverned) {
       sleep(options.updatePeriod);
     }
