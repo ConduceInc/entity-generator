@@ -16,8 +16,9 @@
 
 namespace po = boost::program_options;
 
-const std::array<double, 3> CENTER_OF_US = {{39.8282, -98.5795, 0.}};
-const double JAN_01_1996_GMT = 820454400.;
+const std::array<double, 3> CENTER_OF_US = {{-98.5795, 39.8282, 0.}};
+// const long long JAN_01_1996_GMT = 820454400000;
+const long long ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
 
 struct CommandLineOptions {
   bool initialize = true;
@@ -39,7 +40,7 @@ struct Entity {
   std::string id;
   std::string kind;
   std::array<double, 3> location;
-  double timestamp;
+  long long timestamp;
 };
 
 std::vector<Entity> entityList;
@@ -60,15 +61,15 @@ random_generator start_lon(alg_start_lon, start_lon_range);
 const double getStartDate() {
   static boost::posix_time::ptime date(boost::gregorian::date(1996, 1, 1));
   static boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
-  return (date - epoch).total_milliseconds() / 1000.0;
+  return (date - epoch).total_milliseconds();
 }
 
-const double NowGMT() {
+const long long NowGMT() {
   static boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
   boost::posix_time::ptime now =
       boost::posix_time::microsec_clock::universal_time();
 
-  return (now - epoch).total_milliseconds() / 1000.0;
+  return (now - epoch).total_milliseconds();
 }
 
 void updateLocation(std::vector<Entity>::iterator topo,
@@ -86,10 +87,10 @@ void updateLocation(std::vector<Entity>::iterator topo,
   } else if (lng < 180 and newLng > 180) {
     newLng -= 360;
   }
-  if (lat > -180 && newLat < -180) {
-    newLat += 360;
-  } else if (lat < 180 and newLat > 180) {
-    newLat -= 360;
+  if (lat > -90 && newLat < -90) {
+    newLat += 180;
+  } else if (lat < 90 and newLat > 90) {
+    newLat -= 180;
   }
 
   topo->location[0] = newLng;
@@ -114,14 +115,15 @@ void initializeEntities() {
     if (options.centerStart) {
       newEntity.location = CENTER_OF_US;
     } else {
-      newEntity.location = {{start_lat(), start_lon(), 0.}};
+      newEntity.location = {{start_lon(), start_lat(), 0.}};
     }
     if (options.live) {
       newEntity.timestamp = NowGMT();
     } else {
-      newEntity.timestamp = JAN_01_1996_GMT;
+      // newEntity.timestamp = JAN_01_1996_GMT;
+      newEntity.timestamp = NowGMT() - ONE_WEEK;
     }
-    newEntity.kind = "default";
+    newEntity.kind = "hank_hill";
     entityList.push_back(newEntity);
   }
 }
@@ -133,7 +135,6 @@ const char *updateEntities() {
 
   random_generator walk(alg_walk, walk_range);
 
-  // std::vector<Slaw> topoSlaws;
   rapidjson::Document jsonDoc;
   jsonDoc.SetObject();
 
@@ -151,7 +152,7 @@ const char *updateEntities() {
     newEntity.AddMember("identity",
                         rapidjson::Value(entity->id.c_str(), entity->id.size()),
                         jsonDoc.GetAllocator());
-    newEntity.AddMember("timestamp_ms", rapidjson::Value(entity->timestamp),
+    newEntity.AddMember("timestamp-ms", rapidjson::Value(entity->timestamp),
                         jsonDoc.GetAllocator());
     newEntity.AddMember(
         "kind", rapidjson::Value(entity->kind.c_str(), entity->kind.size()),
@@ -159,7 +160,6 @@ const char *updateEntities() {
     newEntity.AddMember("path",
                         getJsonPath(entity->location, jsonDoc.GetAllocator()),
                         jsonDoc.GetAllocator());
-    // topoSlaws.push_back();
     entities.PushBack(newEntity, jsonDoc.GetAllocator());
   }
   jsonDoc.AddMember("entities", entities, jsonDoc.GetAllocator());
@@ -235,12 +235,11 @@ void parseCommandLine(int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
   parseCommandLine(argc, argv);
-  // oblong::plasma::Hose *topoToSluice = oblong::plasma::Pool::Participate(
-  //    ("tcp://" + options.hostname + "/topo-to-sluice").c_str());
   std::string CONDUCE_ADD_DATA_URL =
-      "https://" + options.hostname + "/conduce/api/datasets/add_data/";
+      "https://" + options.hostname + "/conduce/api/datasets/add_datav2/";
   std::string addDataUrl = CONDUCE_ADD_DATA_URL + options.dataset;
   CURL *curl = curl_easy_init();
+  char errorBuffer[CURL_ERROR_SIZE];
   struct curl_slist *entityHeader = NULL;
   if (curl) {
     curl_easy_setopt(curl, CURLOPT_URL, addDataUrl.c_str());
@@ -249,15 +248,8 @@ int main(int argc, char *argv[]) {
     std::string keyHeader = "Authorization: Bearer " + options.apiKey;
     entityHeader = curl_slist_append(entityHeader, keyHeader.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, entityHeader);
-    // curl_easy_perform(curl);
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
   }
-
-  /*
-  if (!topoToSluice) {
-    std::cerr << "topo-to-sluice does not exist, exiting" << std::endl;
-    return 1;
-  }
-  */
 
   initializeEntities();
 
@@ -266,21 +258,21 @@ int main(int argc, char *argv[]) {
   for (int count = 0; count < UPDATE_COUNT; ++count) {
     // double before = NowGMT();
     const char *entitiesStr = updateEntities();
-    char *postStr = curl_easy_escape(curl, entitiesStr, strlen(entitiesStr));
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postStr);
-    std::cout << postStr << std::endl;
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, entitiesStr);
+    std::cout << entitiesStr << std::endl;
 
     CURLcode res;
+    errorBuffer[0] = 0;
     res = curl_easy_perform(curl);
-    std::cout << "response: " << res << std::endl;
-    // std::cout << NowGMT() - before << std::endl;
+    if (res != CURLE_OK) {
+      std::cout << "libcurl: " << res << std::endl;
+      std::cout << errorBuffer << std::endl;
+      return 1;
+    }
     if (!options.ungoverned) {
       sleep(options.updatePeriod);
     }
-    curl_free(postStr);
   }
-
-  // topoToSluice->Delete();
 
   curl_easy_cleanup(curl);
   return 0;
