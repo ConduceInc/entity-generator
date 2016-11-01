@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <array>
+#include <unistd.h>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
@@ -289,15 +290,22 @@ void waitForCompletion(std::string& job, CURL* curl) {
                 std::cout << errorBuffer << std::endl;
                 exit(1);
             }
-            rapidjson::Document d;
-            d.Parse(result.c_str());
-            if (d.HasMember("response")) {
-                if (d["response"].GetInt() != 200) {
-                    std::cout << "add_data failed with code " << d["response"].GetInt() << "\n\n";
-                    std::cout << d["result"].GetString() << std::endl;
-                    exit(1);
+            long code = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+            if (code != 200) {
+                std::cout << "Warning: bad response code received: " << code << std::endl;
+            } else {
+                rapidjson::Document d;
+                d.Parse(result.c_str());
+                if (d.HasMember("response")) {
+                    if (d["response"].GetInt() != 200) {
+                        std::cout << "add_data failed with code " << d["response"].GetInt() << "\n\n";
+                        std::cout << d["result"].GetString() << std::endl;
+                        exit(1);
+                    }
+                    return;
                 }
-                return;
+                usleep(1000);
             }
         }
     }
@@ -368,7 +376,12 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     delete[] entitiesStr;
+    if (headers.find("Location") == headers.end()) {
+        std::cout << "No Location header found in response" << std::endl;
+        return 1;
+    }
     waitForCompletion(headers["Location"], curl);
+
     if (!options.ungoverned) {
       sleep(options.updatePeriod);
     }
