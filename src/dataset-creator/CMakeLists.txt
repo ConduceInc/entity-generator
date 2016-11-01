@@ -1,7 +1,7 @@
 
-find_package(Boost 1.55 EXACT REQUIRED COMPONENTS program_options)
+find_package(Boost 1.55 REQUIRED COMPONENTS program_options)
 
-INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${RAPIDJSON_INCLUDE_DIRS}) 
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${RAPIDJSON_INCLUDE_DIRS})
 
 set (SRC
     datatset-creator.cpp
