@@ -1,7 +1,9 @@
 #include <iostream>
 #include <string>
 #include <array>
+#include <unistd.h>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/format.hpp>
@@ -35,6 +37,7 @@ struct CommandLineOptions {
   std::string dataset;
   std::string apiKey;
   std::string kind;
+  bool insecure = false;
 };
 
 struct Entity {
@@ -211,7 +214,9 @@ void parseCommandLine(int argc, char *argv[]) {
       "update-period", po::value<int>(&options.updatePeriod)->default_value(1),
       "Period on which updates are sent")(
       "ungoverned", po::value<bool>(&options.ungoverned)->default_value(true),
-      "Generate updates as quickly as possible");
+      "Generate updates as quickly as possible")(
+      "insecure", po::bool_switch(&options.insecure)->default_value(false),
+      "Disables SSL verifications");
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -245,28 +250,88 @@ struct string {
   size_t len;
 };
 
-void init_string(struct string *s) {
-  s->len = 0;
-  s->ptr = (char *)malloc(s->len + 1);
-  if (s->ptr == NULL) {
-    fprintf(stderr, "malloc() failed\n");
-    exit(EXIT_FAILURE);
-  }
-  s->ptr[0] = '\0';
+//A function that dumps response data from a curl request into the provided std::string
+size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
+    s->append((char*) ptr, size * nmemb);
+    return size * nmemb;
 }
 
-size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s) {
-  size_t new_len = s->len + size * nmemb;
-  s->ptr = (char *)realloc(s->ptr, new_len + 1);
-  if (s->ptr == NULL) {
-    fprintf(stderr, "realloc() failed\n");
-    exit(EXIT_FAILURE);
-  }
-  memcpy(s->ptr + s->len, ptr, size * nmemb);
-  s->ptr[new_len] = '\0';
-  s->len = new_len;
+//A function that dumps response headers from a curl request into the provided map
+//The map will store header keys and their associated values
+size_t headerfunc(void* ptr, size_t size, size_t nitems, std::map<std::string, std::string>* m) {
+    std::vector<std::string> strs;
+    std::string data((char*)ptr, size * nitems);
+    boost::algorithm::split(strs, data, boost::is_any_of(":"));
+    if (strs.size() > 1) {
+        (*m)[boost::algorithm::trim_copy(strs[0])] = boost::algorithm::trim_copy(strs[1]);
+    }
 
-  return size * nmemb;
+    return size * nitems;
+}
+
+//Waits for an asynchronous job to complete by querying the provided jobs URI
+void waitForCompletion(std::string& job, CURL* curl) {
+    if (!job.empty()) {
+        char errorBuffer[CURL_ERROR_SIZE];
+        std::cout << "Waiting for " << job << std::endl;
+
+        //The location header from an asynchronous call gives the relative URI, so we need to prepend the host and /conduce/api
+        std::string jobUrl = "https://" + options.hostname + "/conduce/api" + job;
+
+        while (true) {
+            //Reset various CURL fields that get modified by the add_data requests.
+            //Querying an asynchronous job status is a GET request so we want to hold on to the result data
+            std::string result;
+            std::map<std::string, std::string> headers;
+            curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
+            curl_easy_setopt(curl, CURLOPT_URL, jobUrl.c_str());
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, 0);
+            curl_easy_setopt(curl, CURLOPT_POST, 0);
+            curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
+
+            CURLcode res;
+            errorBuffer[0] = 0;
+            res = curl_easy_perform(curl);
+            if (res != CURLE_OK) {
+                std::cout << "libcurl: " << res << std::endl;
+                std::cout << errorBuffer << std::endl;
+                exit(1);
+            }
+            long code = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+            //A successful query for an asynchronous job should yield a 200 response
+            //But sometimes asynchronous jobs can take a little long to update their status
+            //(Not likely in this program)
+            //Async job status is stored in redis with an expiration time of 5 minutes.
+            //Every time the progress is updated, the 5 minute expiration is refreshed.
+            //If a job takes a really long time and the underlying code doesn't do a good job of
+            //keeping the progress updated, the redis key can vanish, causing the query for status to fail.
+            //Due to the asynchronous nature of the task, it is very difficult for the end user to tell if the job failed (likely due to a server bug)
+            //or if it just hasn't updated its progress and it's taking a long time (also a server bug, but a different kind)
+            //Given that, we'll just be extra safe and print a warning.  If the user sees nothing but warnings for a long time, it's probably a job failure.
+            //Note that if the job fails without killing the whole server process, it should finish and report a failing response status.
+            if (code != 200) {
+                std::cout << "Warning: bad response code received: " << code << std::endl;
+            } else {
+                //The response for a job status query is a json structure containing at least a 'progress' field (floating point value between 0.0 and 1.0 indicating percentage complete)
+                //When the job is complete, it will also contain a 'response' field containing an http response code (200 is success for an add_data call)
+                //and a 'result' field containing a string with any useful response output (like an error message)
+                //We don't really care about anything in a successful response, so we're only processing errors here and breaking from the loop on success
+                rapidjson::Document d;
+                d.Parse(result.c_str());
+                if (d.HasMember("response")) {
+                    if (d["response"].GetInt() != 200) {
+                        std::cout << "add_data failed with code " << d["response"].GetInt() << "\n\n";
+                        std::cout << d["result"].GetString() << std::endl;
+                        exit(1);
+                    }
+                    return;
+                }
+                usleep(1000);
+            }
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -283,8 +348,8 @@ int main(int argc, char *argv[]) {
   std::string addDataUrl = CONDUCE_ADD_DATA_URL + options.dataset;
   CURL *curl = curl_easy_init();
   char errorBuffer[CURL_ERROR_SIZE];
-  struct string s;
-  init_string(&s);
+  std::string s;
+  std::map<std::string, std::string> headers;
   struct curl_slist *entityHeader = NULL;
   if (curl) {
     curl_easy_setopt(curl, CURLOPT_URL, addDataUrl.c_str());
@@ -294,8 +359,13 @@ int main(int argc, char *argv[]) {
     entityHeader = curl_slist_append(entityHeader, keyHeader.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, entityHeader);
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
-    // curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    // curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    if (options.insecure) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    }
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
   }
 
   initializeEntities();
@@ -304,16 +374,25 @@ int main(int argc, char *argv[]) {
       (60 / options.timeInterval) * 60 * 24 * options.daysToRun;
   for (int count = 0; count < UPDATE_COUNT; ++count) {
     // double before = NowGMT();
+    s = std::string();
+    headers.clear();
     const char *entitiesStr = updateEntities(walk);
     if (strlen(entitiesStr) == 0) {
       std::cout << "Zero length string" << std::endl;
       return 1;
     }
+    //Reset all of the curl fields for the next add_data call
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
+    curl_easy_setopt(curl, CURLOPT_URL, addDataUrl.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, entitiesStr);
+    curl_easy_setopt(curl, CURLOPT_POST, 1);
     std::cout << "request data: " << entitiesStr << std::endl;
 
     CURLcode res;
     errorBuffer[0] = 0;
+
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
       std::cout << "libcurl: " << res << std::endl;
@@ -321,6 +400,13 @@ int main(int argc, char *argv[]) {
       return 1;
     }
     delete[] entitiesStr;
+    //The location header contains the URI to query for status updates for the asyncrhonous job
+    if (headers.find("Location") == headers.end()) {
+        std::cout << "No Location header found in response" << std::endl;
+        return 1;
+    }
+    waitForCompletion(headers["Location"], curl);
+
     if (!options.ungoverned) {
       sleep(options.updatePeriod);
     }
