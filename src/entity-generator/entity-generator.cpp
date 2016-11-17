@@ -382,6 +382,7 @@ int main(int argc, char *argv[]) {
         curl_slist_append(entityHeader, "Content-Type: application/json");
     std::string keyHeader = "Authorization: Bearer " + options.apiKey;
     entityHeader = curl_slist_append(entityHeader, keyHeader.c_str());
+    entityHeader = curl_slist_append(entityHeader, "Expect:");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, entityHeader);
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
     if (options.insecure) {
