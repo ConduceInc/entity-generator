@@ -44,7 +44,7 @@ struct Entity {
   std::string id;
   std::string kind;
   std::array<double, 3> location;
-  long long timestamp;
+  uint64_t timestamp;
 };
 
 std::vector<Entity> entityList;
