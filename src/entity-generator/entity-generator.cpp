@@ -396,8 +396,7 @@ int main(int argc, char *argv[]) {
 
   initializeEntities();
 
-  const int UPDATE_COUNT =
-      (60 / options.timeInterval) * 60 * 24 * options.daysToRun;
+  const int UPDATE_COUNT = 3600 * 24 * options.daysToRun / options.timeInterval;
   for (int count = 0; count < UPDATE_COUNT; ++count) {
     // double before = NowGMT();
     s = std::string();
