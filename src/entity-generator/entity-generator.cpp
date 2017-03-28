@@ -282,7 +282,7 @@ void waitForCompletion(std::string &job, CURL *curl) {
 
     // The location header from an asynchronous call gives the relative URI, so
     // we need to prepend the host and /conduce/api
-    std::string jobUrl = "https://" + options.hostname + "/conduce/api" + job;
+    std::string jobUrl = "https://" + options.hostname + "/conduce/api/v1" + job;
 
     while (true) {
       // Reset various CURL fields that get modified by the add_data requests.
@@ -369,7 +369,7 @@ int main(int argc, char *argv[]) {
 
   parseCommandLine(argc, argv);
   std::string CONDUCE_ADD_DATA_URL =
-      "https://" + options.hostname + "/conduce/api/datasets/add_datav2/";
+      "https://" + options.hostname + "/conduce/api/v1/datasets/add-data/";
   std::string addDataUrl = CONDUCE_ADD_DATA_URL + options.dataset;
   CURL *curl = curl_easy_init();
   char errorBuffer[CURL_ERROR_SIZE];
