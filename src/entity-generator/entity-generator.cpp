@@ -131,7 +131,7 @@ void initializeEntities() {
   }
 }
 
-const char *updateEntities(random_generator &walk) {
+const std::string updateEntities(random_generator &walk) {
   rapidjson::Document jsonDoc;
   jsonDoc.SetObject();
 
@@ -171,10 +171,10 @@ const char *updateEntities(random_generator &walk) {
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
   jsonDoc.Accept(writer);
-  const char *jsonStr = buffer.GetString();
-  char *strCpy = new char[strlen(jsonStr)];
-  strcpy(strCpy, jsonStr);
-  return strCpy;
+  std::string jsonStr = buffer.GetString();
+  //std::shared_ptr<char> strCpy(new char[strlen(jsonStr)]);
+  //strcpy(strCpy.get(), jsonStr);
+  return jsonStr;
 }
 
 void parseCommandLine(int argc, char *argv[]) {
@@ -398,9 +398,9 @@ int main(int argc, char *argv[]) {
     // double before = NowGMT();
     s = std::string();
     headers.clear();
-    const char *entitiesStr = updateEntities(walk);
-    if (strlen(entitiesStr) == 0) {
       std::cout << "Zero length string" << std::endl;
+    const std::string entitiesStr = updateEntities(walk);
+    if (strlen(entitiesStr.c_str()) == 0) {
       return 1;
     }
     std::cout << addDataUrl << std::endl;
@@ -409,9 +409,8 @@ int main(int argc, char *argv[]) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
     curl_easy_setopt(curl, CURLOPT_URL, addDataUrl.c_str());
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, entitiesStr);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, entitiesStr.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1);
-    // std::cout << "request data: " << entitiesStr << std::endl;
 
     CURLcode res;
     errorBuffer[0] = 0;
@@ -422,7 +421,8 @@ int main(int argc, char *argv[]) {
       std::cout << errorBuffer << std::endl;
       return 1;
     }
-    delete[] entitiesStr;
+    //std::cout << "request data: " << entitiesStr.c_str() << std::endl;
+    //delete[] entitiesStr;
     // The location header contains the URI to query for status updates for the
     // asyncrhonous job
     /*for (auto it = headers.begin(); it != headers.end(); ++it) {
