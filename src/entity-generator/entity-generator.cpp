@@ -24,14 +24,13 @@ const long long ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
 
 struct CommandLineOptions {
   bool initialize = true;
-  int updatePeriod = 1;
   int timeInterval = 15;
   int entityCount = 100;
   bool centerStart = false;
   double stepSize = 0.1;
   bool marchWest = false;
   bool live = false;
-  bool ungoverned = true;
+  bool ungoverned = false;
   int daysToRun = 1;
   std::string hostname;
   std::string dataset;
@@ -211,9 +210,7 @@ void parseCommandLine(int argc, char *argv[]) {
       "Distance to move nodes every time interval (decimal degrees)")(
       "time-interval", po::value<int>(&options.timeInterval)->default_value(15),
       "Seconds between topology updates")(
-      "update-period", po::value<int>(&options.updatePeriod)->default_value(1),
-      "Period on which updates are sent")(
-      "ungoverned", po::value<bool>(&options.ungoverned)->default_value(true),
+      "ungoverned", po::value<bool>(&options.ungoverned)->default_value(false),
       "Generate updates as quickly as possible")(
       "insecure", po::bool_switch(&options.insecure)->default_value(false),
       "Disables SSL verifications");
