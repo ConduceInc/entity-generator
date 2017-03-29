@@ -1,5 +1,5 @@
 
-find_package(Boost 1.55 REQUIRED COMPONENTS program_options)
+find_package(Boost 1.55 REQUIRED COMPONENTS program_options date_time)
 
 INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${RAPIDJSON_INCLUDE_DIRS})
 

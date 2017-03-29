@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/format.hpp>
@@ -73,6 +74,10 @@ const long long NowGMT() {
       boost::posix_time::microsec_clock::universal_time();
 
   return (now - epoch).total_milliseconds();
+}
+
+const std::string getTimeString() {
+  return boost::posix_time::to_iso_string(boost::posix_time::second_clock::universal_time());
 }
 
 void updateLocation(std::vector<Entity>::iterator topo,
@@ -165,15 +170,13 @@ const std::string updateEntities(random_generator &walk) {
     entities.PushBack(newEntity, jsonDoc.GetAllocator());
     ++count;
   }
-  std::cout << "Updated " << count << " entities" << std::endl;
+  std::cout << getTimeString() << ": Updating " << count << " entities" << std::endl;
   jsonDoc.AddMember("entities", entities, jsonDoc.GetAllocator());
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
   jsonDoc.Accept(writer);
   std::string jsonStr = buffer.GetString();
-  //std::shared_ptr<char> strCpy(new char[strlen(jsonStr)]);
-  //strcpy(strCpy.get(), jsonStr);
   return jsonStr;
 }
 
@@ -298,7 +301,7 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
       errorBuffer[0] = 0;
       res = curl_easy_perform(curl);
       if (res != CURLE_OK) {
-        std::cout << "libcurl: " << res << std::endl;
+        std::cout << getTimeString() << ": libcurl: " << res << std::endl;
         std::cout << errorBuffer << std::endl;
         exit(1);
       }
@@ -325,7 +328,7 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
       // Note that if the job fails without killing the whole server process, it
       // should finish and report a failing response status.
       if (code != 200) {
-        std::cout << "Warning: bad response code received: " << code
+        std::cout << getTimeString() << ": Warning: bad response code received: " << code
                   << std::endl;
       } else {
         // The response for a job status query is a json structure containing at
@@ -343,7 +346,7 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
         d.Parse(result.c_str());
         if (d.HasMember("response")) {
           if (d["response"].GetInt() != 200) {
-            std::cout << "add_data failed with code " << d["response"].GetInt()
+            std::cout << getTimeString() << ": add_data failed with code " << d["response"].GetInt()
                       << "\n\n";
             std::cout << d["result"].GetString() << std::endl;
             exit(1);
@@ -398,12 +401,12 @@ int main(int argc, char *argv[]) {
     // double before = NowGMT();
     s = std::string();
     headers.clear();
-      std::cout << "Zero length string" << std::endl;
     const std::string entitiesStr = updateEntities(walk);
     if (strlen(entitiesStr.c_str()) == 0) {
+      std::cout << getTimeString() << ": Zero length string" << std::endl;
       return 1;
     }
-    std::cout << addDataUrl << std::endl;
+    std::cout << getTimeString() << ": " << addDataUrl << std::endl;
     // Reset all of the curl fields for the next add_data call
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errorBuffer);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -417,7 +420,7 @@ int main(int argc, char *argv[]) {
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
-      std::cout << "libcurl: " << res << std::endl;
+      std::cout << getTimeString() << ": libcurl: " << res << std::endl;
       std::cout << errorBuffer << std::endl;
       return 1;
     }
@@ -429,12 +432,13 @@ int main(int argc, char *argv[]) {
       std::cout << it->first + ": " + it->second << std::endl;
     }*/
     if (headers.find("Location") == headers.end()) {
-      std::cout << "No Location header found in response" << std::endl;
+      std::cout << getTimeString() << ": No Location header found in response" << std::endl;
       return 1;
     }
     waitForCompletion(headers["Location"], curl);
 
     if (!options.ungoverned) {
+      std::cout << getTimeString() <<  ": Sleeping for " << options.timeInterval << " seconds" << std::endl;
       sleep(options.timeInterval);
     }
   }
