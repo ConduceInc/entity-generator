@@ -272,14 +272,14 @@ size_t headerfunc(void *ptr, size_t size, size_t nitems,
 }
 
 // Waits for an asynchronous job to complete by querying the provided jobs URI
-void waitForCompletion(std::string &job, CURL *curl) {
-  if (!job.empty()) {
+void waitForCompletion(std::string &jobUri, CURL *curl) {
+  if (!jobUri.empty()) {
     char errorBuffer[CURL_ERROR_SIZE];
-    std::cout << "Waiting for " << job << std::endl;
+    std::cout << getTimeString() << ": Waiting for " << jobUri << std::endl;
 
     // The location header from an asynchronous call gives the relative URI, so
     // we need to prepend the host and /conduce/api
-    std::string jobUrl = "https://" + options.hostname + "/conduce/api/v1" + job;
+    std::string jobUrl = "https://" + options.hostname + jobUri;
 
     while (true) {
       // Reset various CURL fields that get modified by the add_data requests.
