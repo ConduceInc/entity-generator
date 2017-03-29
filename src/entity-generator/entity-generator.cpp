@@ -435,7 +435,7 @@ int main(int argc, char *argv[]) {
     waitForCompletion(headers["Location"], curl);
 
     if (!options.ungoverned) {
-      sleep(options.updatePeriod);
+      sleep(options.timeInterval);
     }
   }
 
