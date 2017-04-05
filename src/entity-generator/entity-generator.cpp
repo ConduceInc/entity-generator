@@ -1,21 +1,21 @@
+#include <array>
 #include <iostream>
 #include <string>
-#include <array>
 #include <unistd.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
-#include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/format.hpp>
-#include <boost/random.hpp>
 #include <boost/generator_iterator.hpp>
 #include <boost/program_options.hpp>
+#include <boost/random.hpp>
 #include <curl/curl.h>
 
 #include "rapidjson/document.h"
-#include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 namespace po = boost::program_options;
 
@@ -77,7 +77,8 @@ const long long NowGMT() {
 }
 
 const std::string getTimeString() {
-  return boost::posix_time::to_iso_string(boost::posix_time::second_clock::universal_time());
+  return boost::posix_time::to_iso_string(
+      boost::posix_time::second_clock::universal_time());
 }
 
 void updateLocation(std::vector<Entity>::iterator topo,
@@ -170,7 +171,8 @@ const std::string updateEntities(random_generator &walk) {
     entities.PushBack(newEntity, jsonDoc.GetAllocator());
     ++count;
   }
-  std::cout << getTimeString() << ": Updating " << count << " entities" << std::endl;
+  std::cout << getTimeString() << ": Updating " << count << " entities"
+            << std::endl;
   jsonDoc.AddMember("entities", entities, jsonDoc.GetAllocator());
 
   rapidjson::StringBuffer buffer;
@@ -300,10 +302,17 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
       CURLcode res;
       errorBuffer[0] = 0;
       res = curl_easy_perform(curl);
-      if (res != CURLE_OK) {
+      while (res != CURLE_OK) {
+        long responseCode = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
         std::cout << getTimeString() << ": libcurl: " << res << std::endl;
-        std::cout << errorBuffer << std::endl;
-        exit(1);
+        std::cout << getTimeString() << responseCode << ": " << errorBuffer
+                  << std::endl;
+        if (responseCode / 100 == 5) {
+          res = curl_easy_perform(curl);
+        } else {
+          break;
+        }
       }
       long code = 0;
       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
@@ -328,7 +337,8 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
       // Note that if the job fails without killing the whole server process, it
       // should finish and report a failing response status.
       if (code != 200) {
-        std::cout << getTimeString() << ": Warning: bad response code received: " << code
+        std::cout << getTimeString()
+                  << ": Warning: bad response code received: " << code
                   << std::endl;
       } else {
         // The response for a job status query is a json structure containing at
@@ -346,8 +356,8 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
         d.Parse(result.c_str());
         if (d.HasMember("response")) {
           if (d["response"].GetInt() != 200) {
-            std::cout << getTimeString() << ": add_data failed with code " << d["response"].GetInt()
-                      << "\n\n";
+            std::cout << getTimeString() << ": add_data failed with code "
+                      << d["response"].GetInt() << "\n\n";
             std::cout << d["result"].GetString() << std::endl;
             exit(1);
           }
@@ -404,7 +414,7 @@ int main(int argc, char *argv[]) {
     const std::string entitiesStr = updateEntities(walk);
     if (strlen(entitiesStr.c_str()) == 0) {
       std::cout << getTimeString() << ": Zero length string" << std::endl;
-      return 1;
+      continue;
     }
     std::cout << getTimeString() << ": " << addDataUrl << std::endl;
     // Reset all of the curl fields for the next add_data call
@@ -419,26 +429,35 @@ int main(int argc, char *argv[]) {
     errorBuffer[0] = 0;
 
     res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
+    while (res != CURLE_OK) {
+      long responseCode = 0;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
       std::cout << getTimeString() << ": libcurl: " << res << std::endl;
-      std::cout << errorBuffer << std::endl;
-      return 1;
+      std::cout << getTimeString() << responseCode << ": " << errorBuffer
+                << std::endl;
+      if (responseCode / 100 == 5) {
+        res = curl_easy_perform(curl);
+      } else {
+        break;
+      }
     }
-    //std::cout << "request data: " << entitiesStr.c_str() << std::endl;
-    //delete[] entitiesStr;
+    // std::cout << "request data: " << entitiesStr.c_str() << std::endl;
+    // delete[] entitiesStr;
     // The location header contains the URI to query for status updates for the
     // asyncrhonous job
     /*for (auto it = headers.begin(); it != headers.end(); ++it) {
       std::cout << it->first + ": " + it->second << std::endl;
     }*/
     if (headers.find("Location") == headers.end()) {
-      std::cout << getTimeString() << ": No Location header found in response" << std::endl;
-      return 1;
+      std::cout << getTimeString() << ": No Location header found in response"
+                << std::endl;
+      continue;
     }
     waitForCompletion(headers["Location"], curl);
 
     if (!options.ungoverned) {
-      std::cout << getTimeString() <<  ": Sleeping for " << options.timeInterval << " seconds" << std::endl;
+      std::cout << getTimeString() << ": Sleeping for " << options.timeInterval
+                << " seconds" << std::endl;
       sleep(options.timeInterval);
     }
   }
