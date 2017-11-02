@@ -13,8 +13,9 @@ osx run:
 ## build/run
 
 1. Clone repository
-1. `mkdir ${repo_root}/build`
+1. cd <new repo dir>
+1. `mkdir build`
 1. `cd build`
-1. `cmake ..`
+1. `cmake ../`
 1. `make`
 1. `./src/entity-generator/entity-generator`
