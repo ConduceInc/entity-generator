@@ -23,7 +23,7 @@ const std::array<double, 3> CENTER_OF_US = {{-98.5795, 39.8282, 0.}};
 
 struct CommandLineOptions {
   bool initialize = true;
-  int timeInterval = 15;
+  int timeInterval = 1;
   int entityCount = 100;
   bool centerStart = false;
   double stepSize = 0.1;
@@ -208,7 +208,7 @@ void parseCommandLine(int argc, char *argv[]) {
       "interval")(
       "step-size", po::value<double>(&options.stepSize)->default_value(0.1),
       "Distance to move nodes every time interval (decimal degrees)")(
-      "time-interval", po::value<int>(&options.timeInterval)->default_value(15),
+      "time-interval", po::value<int>(&options.timeInterval)->default_value(1),
       "Seconds between topology updates")(
       "endtime-offset",
       po::value<uint64_t>(&options.endtimeOffset)->default_value(0),
