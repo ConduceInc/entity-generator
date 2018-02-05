@@ -198,9 +198,6 @@ void parseCommandLine(int argc, char *argv[]) {
       "Number of entities to generate topologies for")(
       "days", po::value<int>(&options.daysToRun)->default_value(1),
       "Days of topologies to send to pool server")(
-      "initialize-topology",
-      po::value<bool>(&options.initialize)->default_value(true),
-      "Add topologies to sluice.  Disable to only send topology updates.")(
       "center-start",
       po::value<bool>(&options.centerStart)->default_value(false),
       "Originate all nodes at the center of the United States.")(
