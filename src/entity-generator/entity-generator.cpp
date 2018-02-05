@@ -20,8 +20,6 @@
 namespace po = boost::program_options;
 
 const std::array<double, 3> CENTER_OF_US = {{-98.5795, 39.8282, 0.}};
-// const long long JAN_01_1996_GMT = 820454400000;
-const long long ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
 
 struct CommandLineOptions {
   bool initialize = true;
@@ -33,6 +31,7 @@ struct CommandLineOptions {
   bool live = false;
   bool ungoverned = false;
   int daysToRun = 1;
+  uint64_t startTime = 0;
   uint64_t endtimeOffset = 0;
   std::string hostname;
   std::string dataset;
@@ -130,8 +129,7 @@ void initializeEntities() {
     if (options.live) {
       newEntity.timestamp = NowGMT();
     } else {
-      // newEntity.timestamp = JAN_01_1996_GMT;
-      newEntity.timestamp = NowGMT() - ONE_WEEK;
+      newEntity.timestamp = options.startTime;
     }
     newEntity.kind = options.kind;
     entityList.push_back(newEntity);
@@ -218,6 +216,8 @@ void parseCommandLine(int argc, char *argv[]) {
       "endtime-offset",
       po::value<uint64_t>(&options.endtimeOffset)->default_value(0),
       "Duration after which entity expires (ms)")(
+      "start-time", po::value<uint64_t>(&options.startTime)->default_value(0),
+      "The timestamp at which the first entity sample should occur (ms)")(
       "ungoverned", po::value<bool>(&options.ungoverned)->default_value(false),
       "Generate updates as quickly as possible")(
       "insecure", po::bool_switch(&options.insecure)->default_value(false),
