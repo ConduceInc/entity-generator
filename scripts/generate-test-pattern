@@ -1,0 +1,3 @@
+#!/bin/bash
+
+./venv/bin/python generate_test_pattern.py $@

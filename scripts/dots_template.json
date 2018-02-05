@@ -1,0 +1,62 @@
+{
+  "kinds": [
+    "generated-test-dot"
+  ],
+  "name": "",
+  "renderings": [{
+    "use_high_precision_time": true,
+    "name": "dots",
+    "rule": {
+      "kinds": [
+        "generated-test-dot"
+      ],
+      "match": "ALL"
+    },
+    "point": [{
+      "uniforms": [{
+          "type": "GL_FLOAT",
+          "shader_uniform": "size_base",
+          "float_value": [
+            0.1
+          ]
+        },
+        {
+          "type": "GL_FLOAT",
+          "shader_uniform": "reference_zoom",
+          "float_value": [
+            2
+          ]
+        },
+        {
+          "type": "GL_VEC4",
+          "shader_uniform": "color_base",
+          "vec_value": [{
+            "y": 0.63072,
+            "x": 0.0192,
+            "z": 0.96,
+            "w": 0.45490196
+          }]
+        }
+      ],
+      "shader": {
+        "fragment": {
+          "uri": "dots/fragment.glsl"
+        },
+        "vertex": {
+          "uri": "dots/vertex.glsl"
+        }
+      },
+      "defines": [{
+        "shader_define_name": "SCALE_LOG"
+      }]
+    }]
+  }],
+  "renderer_service_name": "marker",
+  "dataset_id": "",
+  "hover_info": [{
+    "hoverable": true,
+    "kinds": [
+      "generated-test-dot"
+    ]
+  }]
+}
