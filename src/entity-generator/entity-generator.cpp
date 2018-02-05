@@ -181,9 +181,9 @@ const std::string updateEntities(random_generator &walk) {
 }
 
 void parseCommandLine(int argc, char *argv[]) {
-  po::options_description desc("topology-generator is a utility for sending "
-                               "network fluoroscope data (topologies) to "
-                               "sluice.\n\nConfiguration options");
+  po::options_description desc(
+      "entity-generator is a utility for sending data to Conduce."
+      "\n\nConfiguration options");
   desc.add_options()("help", "Print the list of command line options")(
       "kind", po::value<std::string>(&options.kind)->default_value("default"),
       "Data kind to assign to entities")(
