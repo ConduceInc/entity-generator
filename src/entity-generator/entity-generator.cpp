@@ -33,6 +33,7 @@ struct CommandLineOptions {
   bool live = false;
   bool ungoverned = false;
   int daysToRun = 1;
+  uint64_t endtimeOffset = 0;
   std::string hostname;
   std::string dataset;
   std::string apiKey;
@@ -158,10 +159,9 @@ const std::string updateEntities(random_generator &walk) {
                         jsonDoc.GetAllocator());
     newEntity.AddMember("timestamp_ms", rapidjson::Value(entity->timestamp),
                         jsonDoc.GetAllocator());
-    newEntity.AddMember(
-        "endtime_ms",
-        rapidjson::Value(entity->timestamp + options.timeInterval * 1000),
-        jsonDoc.GetAllocator());
+    newEntity.AddMember("endtime_ms", rapidjson::Value(entity->timestamp +
+                                                       options.endtimeOffset),
+                        jsonDoc.GetAllocator());
     newEntity.AddMember(
         "kind", rapidjson::Value(entity->kind.c_str(), entity->kind.size()),
         jsonDoc.GetAllocator());
@@ -215,6 +215,9 @@ void parseCommandLine(int argc, char *argv[]) {
       "Distance to move nodes every time interval (decimal degrees)")(
       "time-interval", po::value<int>(&options.timeInterval)->default_value(15),
       "Seconds between topology updates")(
+      "endtime-offset",
+      po::value<uint64_t>(&options.endtimeOffset)->default_value(0),
+      "Duration after which entity expires (ms)")(
       "ungoverned", po::value<bool>(&options.ungoverned)->default_value(false),
       "Generate updates as quickly as possible")(
       "insecure", po::bool_switch(&options.insecure)->default_value(false),
