@@ -1,8 +1,8 @@
-#Entity generator helper scripts
+# Entity generator helper scripts
 
 These helper scripts are intended to make visualizing a "live" test pattern easy.
 
-##Steps:
+## Steps:
 
 1. Run `setup.sh` to install the python virtual environment and dependencies
 1. Run `./generate-test-pattern <host> <api-key>`.  This will create a dataset, lens template and start ingesting.
