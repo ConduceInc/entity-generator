@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
+#include <cmath>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time/gregorian/gregorian_types.hpp>
@@ -20,12 +21,10 @@
 namespace po = boost::program_options;
 
 const std::array<double, 3> CENTER_OF_US = {{-98.5795, 39.8282, 0.}};
-// const long long JAN_01_1996_GMT = 820454400000;
-const long long ONE_WEEK = 1000 * 60 * 60 * 24 * 7;
 
 struct CommandLineOptions {
   bool initialize = true;
-  int timeInterval = 15;
+  int timeInterval = 1;
   int entityCount = 100;
   bool centerStart = false;
   double stepSize = 0.1;
@@ -33,17 +32,21 @@ struct CommandLineOptions {
   bool live = false;
   bool ungoverned = false;
   int daysToRun = 1;
+  uint64_t startTime = 0;
+  uint64_t endtimeOffset = 0;
   std::string hostname;
   std::string dataset;
   std::string apiKey;
   std::string kind;
   bool insecure = false;
+  bool testPattern = false;
 };
 
 struct Entity {
   std::string id;
   std::string kind;
   std::array<double, 3> location;
+  std::array<double, 3> initialLocation;
   uint64_t timestamp;
 };
 
@@ -81,25 +84,50 @@ const std::string getTimeString() {
       boost::posix_time::second_clock::universal_time());
 }
 
+void moveToNextTestLocation(double &lng, double &lat, const double initialLng,
+                            const double initialLat) {
+  if (lng == initialLng && lat == initialLat) {
+    lng = initialLng + options.stepSize;
+  } else if (lng == initialLng + options.stepSize && lat == initialLat) {
+    lat = initialLat + options.stepSize;
+  } else if (lng == initialLng + options.stepSize &&
+             lat == initialLat + options.stepSize) {
+    lng = initialLng;
+  } else if (lng == initialLng && lat == initialLat + options.stepSize) {
+    lat = initialLat;
+  } else {
+    lat = initialLat;
+    lng = initialLng;
+  }
+}
+
 void updateLocation(std::vector<Entity>::iterator topo,
                     random_generator &walk) {
   double lng = topo->location[0];
   double lat = topo->location[1];
-  double newLat = lat + walk();
-  double newLng = lng + walk();
-  if (options.marchWest) {
-    newLng = lng - options.stepSize;
-  }
+  double newLat = lat;
+  double newLng = lng;
 
-  if (lng > -180 && newLng < -180) {
-    newLng += 360;
-  } else if (lng < 180 and newLng > 180) {
-    newLng -= 360;
-  }
-  if (lat > -90 && newLat < -90) {
-    newLat += 180;
-  } else if (lat < 90 and newLat > 90) {
-    newLat -= 180;
+  if (options.testPattern) {
+    moveToNextTestLocation(newLng, newLat, topo->initialLocation[0],
+                           topo->initialLocation[1]);
+  } else {
+    newLat += walk();
+    newLng += walk();
+    if (options.marchWest) {
+      newLng = lng - options.stepSize;
+    }
+
+    if (lng > -180 && newLng < -180) {
+      newLng += 360;
+    } else if (lng < 180 and newLng > 180) {
+      newLng -= 360;
+    }
+    if (lat > -90 && newLat < -90) {
+      newLat += 180;
+    } else if (lat < 90 and newLat > 90) {
+      newLat -= 180;
+    }
   }
 
   topo->location[0] = newLng;
@@ -117,20 +145,30 @@ rapidjson::Value getJsonPath(std::array<double, 3> location,
   return path;
 }
 
+std::array<double, 3> getGridLocation(int index, int entityCount) {
+  int side = ceil(sqrt(static_cast<double>(entityCount)));
+  int row = index / side;
+  int col = index % side;
+  return {{static_cast<double>(col) * options.stepSize * 3,
+           static_cast<double>(row) * options.stepSize * 3, 0}};
+}
+
 void initializeEntities() {
   for (int i = 0; i < options.entityCount; ++i) {
     Entity newEntity;
     newEntity.id = str(boost::format("live-test-%1%") % i);
-    if (options.centerStart) {
+    if (options.testPattern) {
+      newEntity.location = getGridLocation(i, options.entityCount);
+    } else if (options.centerStart) {
       newEntity.location = CENTER_OF_US;
     } else {
       newEntity.location = {{start_lon(), start_lat(), 0.}};
     }
+    newEntity.initialLocation = newEntity.location;
     if (options.live) {
       newEntity.timestamp = NowGMT();
     } else {
-      // newEntity.timestamp = JAN_01_1996_GMT;
-      newEntity.timestamp = NowGMT() - ONE_WEEK;
+      newEntity.timestamp = options.startTime;
     }
     newEntity.kind = options.kind;
     entityList.push_back(newEntity);
@@ -158,10 +196,9 @@ const std::string updateEntities(random_generator &walk) {
                         jsonDoc.GetAllocator());
     newEntity.AddMember("timestamp_ms", rapidjson::Value(entity->timestamp),
                         jsonDoc.GetAllocator());
-    newEntity.AddMember(
-        "endtime_ms",
-        rapidjson::Value(entity->timestamp + options.timeInterval * 1000),
-        jsonDoc.GetAllocator());
+    newEntity.AddMember("endtime_ms", rapidjson::Value(entity->timestamp +
+                                                       options.endtimeOffset),
+                        jsonDoc.GetAllocator());
     newEntity.AddMember(
         "kind", rapidjson::Value(entity->kind.c_str(), entity->kind.size()),
         jsonDoc.GetAllocator());
@@ -183,9 +220,9 @@ const std::string updateEntities(random_generator &walk) {
 }
 
 void parseCommandLine(int argc, char *argv[]) {
-  po::options_description desc("topology-generator is a utility for sending "
-                               "network fluoroscope data (topologies) to "
-                               "sluice.\n\nConfiguration options");
+  po::options_description desc(
+      "entity-generator is a utility for sending data to Conduce."
+      "\n\nConfiguration options");
   desc.add_options()("help", "Print the list of command line options")(
       "kind", po::value<std::string>(&options.kind)->default_value("default"),
       "Data kind to assign to entities")(
@@ -200,25 +237,30 @@ void parseCommandLine(int argc, char *argv[]) {
       "Number of entities to generate topologies for")(
       "days", po::value<int>(&options.daysToRun)->default_value(1),
       "Days of topologies to send to pool server")(
-      "initialize-topology",
-      po::value<bool>(&options.initialize)->default_value(true),
-      "Add topologies to sluice.  Disable to only send topology updates.")(
       "center-start",
       po::value<bool>(&options.centerStart)->default_value(false),
       "Originate all nodes at the center of the United States.")(
       "march-west", po::value<bool>(&options.marchWest)->default_value(false),
       "Cause all nodes to move westward every interval")(
-      "live", po::value<bool>(&options.live)->default_value(false),
+      "live", po::bool_switch(&options.live)->default_value(false),
       "Generate topology updates now rather than at a fixed start date and "
       "interval")(
       "step-size", po::value<double>(&options.stepSize)->default_value(0.1),
       "Distance to move nodes every time interval (decimal degrees)")(
-      "time-interval", po::value<int>(&options.timeInterval)->default_value(15),
+      "time-interval", po::value<int>(&options.timeInterval)->default_value(1),
       "Seconds between topology updates")(
+      "endtime-offset",
+      po::value<uint64_t>(&options.endtimeOffset)->default_value(0),
+      "Duration after which entity expires (ms)")(
+      "start-time", po::value<uint64_t>(&options.startTime)->default_value(0),
+      "The timestamp at which the first entity sample should occur (ms)")(
       "ungoverned", po::value<bool>(&options.ungoverned)->default_value(false),
       "Generate updates as quickly as possible")(
       "insecure", po::bool_switch(&options.insecure)->default_value(false),
-      "Disables SSL verifications");
+      "Disables SSL verifications")(
+      "test-pattern",
+      po::bool_switch(&options.testPattern)->default_value(false),
+      "Override random motion entity behavior and generate a test pattern.");
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -371,12 +413,6 @@ void waitForCompletion(std::string &jobUri, CURL *curl) {
 
 int main(int argc, char *argv[]) {
 
-  boost::mt19937 alg_walk(0);
-  boost::random::uniform_real_distribution<> walk_range(-1 * options.stepSize,
-                                                        options.stepSize);
-
-  random_generator walk(alg_walk, walk_range);
-
   parseCommandLine(argc, argv);
   std::string CONDUCE_ADD_DATA_URL =
       "https://" + options.hostname + "/conduce/api/v1/datasets/add-data/";
@@ -406,9 +442,14 @@ int main(int argc, char *argv[]) {
 
   initializeEntities();
 
+  boost::mt19937 alg_walk(0);
+  boost::random::uniform_real_distribution<> walk_range(-1 * options.stepSize,
+                                                        options.stepSize);
+
+  random_generator walk(alg_walk, walk_range);
+
   const int UPDATE_COUNT = 3600 * 24 * options.daysToRun / options.timeInterval;
   for (int count = 0; count < UPDATE_COUNT; ++count) {
-    // double before = NowGMT();
     s = std::string();
     headers.clear();
     const std::string entitiesStr = updateEntities(walk);

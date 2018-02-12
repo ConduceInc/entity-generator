@@ -1,0 +1,4 @@
+https://github.com/ConduceInc/conduce-python-api/archive/v2.1.1.zip#egg=conduce
+python-dateutil==2.6.1
+pytz==2017.2
+pint==0.8.1

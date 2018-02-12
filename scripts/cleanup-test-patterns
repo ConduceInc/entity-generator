@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo "Are you sure!"
+echo -n "This will delete all resource with "generated-test-pattern" in the name (Yes/n): "
+read answer
+
+if [ "${answer}" == "Yes" ] ; then
+    ./venv/bin/conduce-api remove --regex=generated-test-pattern --all 
+else
+   echo "Operation aborted"
+fi
