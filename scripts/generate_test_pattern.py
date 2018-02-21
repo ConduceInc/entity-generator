@@ -61,10 +61,11 @@ def main():
         '--dataset-id', help='The ID of the dataset to ingest data to, overrides dataset-name')
     arg_parser.add_argument(
         '--dataset-name', help='The name of the dataset to ingest data to, fails if more than one dataset found')
+    arg_parser.add_argument(
+        '--entity-count', help='The number of entities to generate in the test pattern', default=64)
 
     args = arg_parser.parse_args()
 
-    entity_count = 64
     kind = 'generated-test-dot'
 
     if args.dataset_id is not None:
@@ -88,7 +89,7 @@ def main():
         sys.exit(1)
 
     cmd_args = [path, '--test-pattern', '--dataset-id={}'.format(dataset_id),
-                '--entity-count={}'.format(entity_count), '--kind={}'.format(kind)]
+                '--entity-count={}'.format(args.entity_count), '--kind={}'.format(kind)]
     if args.host:
         cmd_args.append('--host={}'.format(args.host))
     if args.api_key:
