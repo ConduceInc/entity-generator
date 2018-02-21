@@ -71,7 +71,7 @@ const double getStartDate() {
   return (date - epoch).total_milliseconds();
 }
 
-const long long NowGMT() {
+const long long nowUTC() {
   static boost::posix_time::ptime epoch(boost::gregorian::date(1970, 1, 1));
   boost::posix_time::ptime now =
       boost::posix_time::microsec_clock::universal_time();
@@ -166,7 +166,7 @@ void initializeEntities() {
     }
     newEntity.initialLocation = newEntity.location;
     if (options.live) {
-      newEntity.timestamp = NowGMT();
+      newEntity.timestamp = nowUTC();
     } else {
       newEntity.timestamp = options.startTime;
     }
@@ -186,7 +186,7 @@ const std::string updateEntities(random_generator &walk) {
        entity != entityList.end(); ++entity) {
     updateLocation(entity, walk);
     if (options.live) {
-      entity->timestamp = NowGMT();
+      entity->timestamp = nowUTC();
     } else {
       entity->timestamp += options.timeInterval * 1000;
     }
@@ -450,6 +450,7 @@ int main(int argc, char *argv[]) {
 
   const int UPDATE_COUNT = 3600 * 24 * options.daysToRun / options.timeInterval;
   for (int count = 0; count < UPDATE_COUNT; ++count) {
+    int startTime = nowUTC();
     s = std::string();
     headers.clear();
     const std::string entitiesStr = updateEntities(walk);
@@ -497,9 +498,13 @@ int main(int argc, char *argv[]) {
     waitForCompletion(headers["Location"], curl);
 
     if (!options.ungoverned) {
-      std::cout << getTimeString() << ": Sleeping for " << options.timeInterval
-                << " seconds" << std::endl;
-      sleep(options.timeInterval);
+      int workTime = nowUTC() - startTime;
+      int sleepTime = (options.timeInterval * 1000) - workTime;
+      if (sleepTime > 0) {
+        std::cout << getTimeString() << ": Sleeping for " << sleepTime
+                  << " milliseconds" << std::endl;
+        usleep(sleepTime * 1000);
+      }
     }
   }
 
