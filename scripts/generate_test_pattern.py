@@ -1,4 +1,5 @@
 import conduce.api
+import conduce.config
 import subprocess
 import os
 import sys
@@ -51,12 +52,25 @@ def check_dataset_id(args):
 def main():
     import argparse
 
+    default_host = None
+    default_user = None
+
+    cfg = conduce.config.get_full_config()
+    if cfg:
+        default_host = cfg.get('default-host')
+        default_user = cfg.get('default-user')
+        if default_host and default_user:
+            default_api_key = conduce.config.get_api_key(
+                default_user, default_host)
+
     arg_parser = argparse.ArgumentParser(
         description='Generate and ingest an entity test pattern.  This tool can be used to generate a live stream or flood the ingest interface with data.  By default, a new dataset is created along with a lens template for viewing the data.  Then it generates and ingests test pattern data.  If the user provides a dataset ID or dataset name the dataset and lens template are not created.')
     arg_parser.add_argument(
-        'host', help='The server on which the command will run')
+        '--user', help='The user that will access Conduce.  This argument is used to indirectly identify an API key to use.', default=default_user)
     arg_parser.add_argument(
-        'api_key', help='The API key used to authenticate')
+        '--host', help='The server on which the command will run', default=default_host)
+    arg_parser.add_argument(
+        '--api_key', help='The API key used to authenticate', default=default_api_key)
     arg_parser.add_argument(
         '--dataset-id', help='The ID of the dataset to ingest data to, overrides dataset-name')
     arg_parser.add_argument(
@@ -65,6 +79,12 @@ def main():
         '--entity-count', help='The number of entities to generate in the test pattern', default=64)
 
     args = arg_parser.parse_args()
+
+    if not args.api_key:
+        if args.user and args.host:
+            api_key = conduce.config.get_api_key(args.user, args.host)
+            if api_key:
+                args.api_key = api_key
 
     kind = 'generated-test-dot'
 
@@ -92,8 +112,12 @@ def main():
                 '--entity-count={}'.format(args.entity_count), '--kind={}'.format(kind)]
     if args.host:
         cmd_args.append('--host={}'.format(args.host))
+    else:
+        print "Target host must be specified on command line or in Conduce config."
     if args.api_key:
         cmd_args.append('--api-key={}'.format(args.api_key))
+    else:
+        print "An API key must be provided on the command line or through your Conduce config."
     subprocess.call(cmd_args)
 
 
