@@ -449,8 +449,9 @@ int main(int argc, char *argv[]) {
   random_generator walk(alg_walk, walk_range);
 
   const int UPDATE_COUNT = 3600 * 24 * options.daysToRun / options.timeInterval;
+  const int START_TIME = nowUTC();
+  int updateTime = START_TIME;
   for (int count = 0; count < UPDATE_COUNT; ++count) {
-    int startTime = nowUTC();
     s = std::string();
     headers.clear();
     const std::string entitiesStr = updateEntities(walk);
@@ -498,12 +499,16 @@ int main(int argc, char *argv[]) {
     waitForCompletion(headers["Location"], curl);
 
     if (!options.ungoverned) {
-      int workTime = nowUTC() - startTime;
-      int sleepTime = (options.timeInterval * 1000) - workTime;
+      updateTime += options.timeInterval * 1000;
+      int sleepTime = updateTime - nowUTC();
+      ;
       if (sleepTime > 0) {
         std::cout << getTimeString() << ": Sleeping for " << sleepTime
                   << " milliseconds" << std::endl;
         usleep(sleepTime * 1000);
+      } else {
+        std::cout << getTimeString() << ": Behind real-time by " << sleepTime
+                  << " milliseconds" << std::endl;
       }
     }
   }
