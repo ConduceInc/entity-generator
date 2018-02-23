@@ -54,6 +54,7 @@ def main():
 
     default_host = None
     default_user = None
+    default_api_key = None
 
     cfg = conduce.config.get_full_config()
     if cfg:
@@ -85,6 +86,10 @@ def main():
             api_key = conduce.config.get_api_key(args.user, args.host)
             if api_key:
                 args.api_key = api_key
+
+    if args.host is None or args.api_key is None:
+        print "Please specify a target host, and a user or API key"
+        sys.exit(2)
 
     kind = 'generated-test-dot'
 
