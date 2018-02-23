@@ -40,6 +40,7 @@ struct CommandLineOptions {
   std::string kind;
   bool insecure = false;
   bool testPattern = false;
+  bool asynchronous = false;
 };
 
 struct Entity {
@@ -258,6 +259,10 @@ void parseCommandLine(int argc, char *argv[]) {
       "Generate updates as quickly as possible")(
       "insecure", po::bool_switch(&options.insecure)->default_value(false),
       "Disables SSL verifications")(
+      "asynchronous",
+      po::bool_switch(&options.asynchronous)->default_value(false),
+      "Don't wait for ingest operation to complete before starting next ingest "
+      "job.")(
       "test-pattern",
       po::bool_switch(&options.testPattern)->default_value(false),
       "Override random motion entity behavior and generate a test pattern.");
@@ -484,24 +489,19 @@ int main(int argc, char *argv[]) {
         break;
       }
     }
-    // std::cout << "request data: " << entitiesStr.c_str() << std::endl;
-    // delete[] entitiesStr;
-    // The location header contains the URI to query for status updates for the
-    // asyncrhonous job
-    /*for (auto it = headers.begin(); it != headers.end(); ++it) {
-      std::cout << it->first + ": " + it->second << std::endl;
-    }*/
-    if (headers.find("Location") == headers.end()) {
-      std::cout << getTimeString() << ": No Location header found in response"
-                << std::endl;
-      continue;
+
+    if (!options.asynchronous) {
+      if (headers.find("Location") == headers.end()) {
+        std::cout << getTimeString() << ": No Location header found in response"
+                  << std::endl;
+        continue;
+      }
+      waitForCompletion(headers["Location"], curl);
     }
-    waitForCompletion(headers["Location"], curl);
 
     if (!options.ungoverned) {
       updateTime += options.timeInterval * 1000;
       int sleepTime = updateTime - nowUTC();
-      ;
       if (sleepTime > 0) {
         std::cout << getTimeString() << ": Sleeping for " << sleepTime
                   << " milliseconds" << std::endl;

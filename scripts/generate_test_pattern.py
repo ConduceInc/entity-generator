@@ -108,7 +108,7 @@ def main():
         print 'Please build entity-generator as documented in the README file'
         sys.exit(1)
 
-    cmd_args = [path, '--test-pattern', '--dataset-id={}'.format(dataset_id),
+    cmd_args = [path, '--asynchronous', '--test-pattern', '--dataset-id={}'.format(dataset_id),
                 '--entity-count={}'.format(args.entity_count), '--kind={}'.format(kind)]
     if args.host:
         cmd_args.append('--host={}'.format(args.host))
