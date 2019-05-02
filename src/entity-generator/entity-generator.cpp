@@ -1,8 +1,8 @@
 #include <array>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <unistd.h>
-#include <cmath>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time/gregorian/gregorian_types.hpp>
@@ -40,6 +40,7 @@ struct CommandLineOptions {
   std::string kind;
   bool insecure = false;
   bool testPattern = false;
+  bool disableSslVerifyPeer = false;
 };
 
 struct Entity {
@@ -196,9 +197,10 @@ const std::string updateEntities(random_generator &walk) {
                         jsonDoc.GetAllocator());
     newEntity.AddMember("timestamp_ms", rapidjson::Value(entity->timestamp),
                         jsonDoc.GetAllocator());
-    newEntity.AddMember("endtime_ms", rapidjson::Value(entity->timestamp +
-                                                       options.endtimeOffset),
-                        jsonDoc.GetAllocator());
+    newEntity.AddMember(
+        "endtime_ms",
+        rapidjson::Value(entity->timestamp + options.endtimeOffset),
+        jsonDoc.GetAllocator());
     newEntity.AddMember(
         "kind", rapidjson::Value(entity->kind.c_str(), entity->kind.size()),
         jsonDoc.GetAllocator());
@@ -226,8 +228,9 @@ void parseCommandLine(int argc, char *argv[]) {
   desc.add_options()("help", "Print the list of command line options")(
       "kind", po::value<std::string>(&options.kind)->default_value("default"),
       "Data kind to assign to entities")(
-      "host", po::value<std::string>(&options.hostname)
-                  ->default_value("dev-app.conduce.com"),
+      "host",
+      po::value<std::string>(&options.hostname)
+          ->default_value("dev-app.conduce.com"),
       "Resolvable name or IP address of Conduce server")(
       "dataset-id", po::value<std::string>(&options.dataset),
       "Dataset unique identifier")(
@@ -245,6 +248,9 @@ void parseCommandLine(int argc, char *argv[]) {
       "live", po::bool_switch(&options.live)->default_value(false),
       "Generate topology updates now rather than at a fixed start date and "
       "interval")(
+      "disable-ssl-verify-peer",
+      po::bool_switch(&options.disableSslVerifyPeer)->default_value(false),
+      "Disable SSL peer verification (local env only)")(
       "step-size", po::value<double>(&options.stepSize)->default_value(0.1),
       "Distance to move nodes every time interval (decimal degrees)")(
       "time-interval", po::value<int>(&options.timeInterval)->default_value(1),
@@ -438,6 +444,12 @@ int main(int argc, char *argv[]) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
+    if (options.disableSslVerifyPeer) {
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    }
+    if (const char *cainfo = std::getenv("REQUESTS_CA_BUNDLE")) {
+      curl_easy_setopt(curl, CURLOPT_CAINFO, cainfo);
+    }
   }
 
   initializeEntities();
