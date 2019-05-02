@@ -35,9 +35,10 @@ def get_dataset_id(args):
         name=args.dataset_name, host=args.host, api_key=args.api_key)
 
     if len(dataset_list) == 1:
-        dataset_id = datatset_list[0]['id']
+        dataset_id = dataset_list[0]['id']
     else:
-        print 'More than one dataset found with name {}'.format(dataset_name)
+        print 'More than one dataset found with name {}'.format(
+            args.dataset_name)
         print dataset_list
 
     return dataset_id
